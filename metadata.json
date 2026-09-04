@@ -1,0 +1,8 @@
+{
+  "name": "WanderWise AI",
+  "description": "Plan Smart. Travel Wise. A smart AI Travel Planner chatbot that creates personalized, budget-conscious trips with live weather, hotel recommendations, daily itineraries, and smart budget adjustments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
