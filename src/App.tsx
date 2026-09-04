@@ -17,17 +17,24 @@ const INITIAL_MESSAGE: ChatMessage = {
   role: 'assistant',
   content: `Hello! I'm **WanderWise AI**, your personal AI Travel Planner. 🌍✈️
 
-Plan Smart. Travel Wise. I help you design full travel itineraries customized specifically to your budget.
+Plan Smart. Travel Wise. I create complete personalized travel plans tailored precisely to your budget.
 
-To get started, simply tell me:
-- **Where** would you like to travel?
-- **Starting city** & **travel dates** (or month)
-- **How many days** & **travelers**
-- **Total budget** & **currency**
-- **Travel preferences** (e.g. relaxation, sightseeing, food, adventure, shopping)
+To design your custom itinerary, simply tell me:
+1. 📍 **Destination**
+2. 📅 **Number of days & travel dates**
+3. 👥 **Number of travelers**
+4. 💰 **Total budget & currency**
+5. 🎯 **Travel preferences** (Sightseeing, Food, Adventure, Shopping, Relaxation)
 
-Or click one of the quick trip starters below!`,
+You can type naturally, pick one of the quick suggestions, or use the setup button above!`,
   timestamp: 'Just now',
+  missingParams: ['destination', 'days', 'travelDates', 'travelers', 'budget', 'preferences'],
+  suggestedPrompts: [
+    'Trip to Tokyo, Japan (5 Days, $2,000 USD)',
+    'Trip to Paris, France (3 Days, $1,200 USD)',
+    'Explore Rome, Italy (4 Days, €1,100 EUR)',
+    'Relax in Bali, Indonesia (7 Days, $900 USD)',
+  ],
 };
 
 export default function App() {
@@ -152,6 +159,8 @@ export default function App() {
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         tripPlan: data.tripPlan || undefined,
         extractedParams: data.extractedParams || undefined,
+        missingParams: data.missingParams || undefined,
+        suggestedPrompts: data.suggestedPrompts || undefined,
       };
 
       setMessages((prev) => [...prev, botMsg]);

@@ -145,28 +145,47 @@ export function generateSmartTripPlan(
     });
   }
 
-  // Budget adjustment
-  const isAdjusted = false;
+  const isOverBudget = totalEstimated > userBudget;
+  const budgetDiff = userBudget - totalEstimated; // positive = under budget, negative = over budget
+  const amountExceeded = isOverBudget ? Math.abs(budgetDiff) : 0;
+  const remainingBudget = !isOverBudget ? budgetDiff : 0;
+
+  // Budget adjustment suggestions if needed or proactively
   const budgetAdjustment = {
-    needed: isAdjusted,
-    explanation: 'Your planned travel expenses fall smoothly within your budget framework.',
-    cheaperHotelsSuggestion: `For additional savings of up to 30%, consider booking Urban Traveler Micro-Hotel in the Arts District.`,
-    cheaperTransportSuggestion: 'Use multi-day public metro/tram passes instead of point-to-point taxis.',
-    removedOrReplacedActivities: 'All suggested morning walking tours and architectural strolls are free or self-guided.',
-    revisedSavings: 'Estimated savings reserve: ' + currency + ' ' + emergencyEst,
+    needed: isOverBudget,
+    originalCost: totalEstimated,
+    targetBudget: userBudget,
+    explanation: isOverBudget
+      ? `The initial estimated cost exceeds your target budget by ${currency} ${amountExceeded.toLocaleString()}. We recommend swapping to budget micro-stays, using local transit day passes, and focusing on free iconic landmarks.`
+      : 'Your planned travel expenses fall comfortably within your target budget framework with a safe buffer.',
+    cheaperHotelsSuggestion: `Opt for "${hotels[2]?.name || 'Urban Traveler Hostel & Micro-Hotel'}" to save approx. ${currency} ${Math.round((hotels[0]?.pricePerNight - hotels[2]?.pricePerNight) * days)} over your stay.`,
+    cheaperTransportSuggestion: 'Purchase a multi-day city transit pass (metro/bus) instead of hailing point-to-point taxis or rideshares.',
+    removedOrReplacedActivities: 'Replace paid viewing decks with free public hilltop parks, riverfront strolls, and historic architectural squares.',
+    revisedSavings: isOverBudget
+      ? `Switching to the budget hotel and transit pass saves approx. ${currency} ${Math.round(amountExceeded * 1.15)}, bringing your trip back within budget!`
+      : `Estimated surplus reserve: ${currency} ${remainingBudget.toLocaleString()} available for shopping or spontaneous dining.`,
   };
 
-  // Conclusion
+  // Conclusion adhering to exact requirements
+  const isAffordable = !isOverBudget || amountExceeded <= userBudget * 0.1;
+  const affordableVerdict = !isOverBudget
+    ? `Yes, highly affordable! Fits comfortably within your ${currency} ${userBudget.toLocaleString()} budget with ${currency} ${remainingBudget.toLocaleString()} remaining cushion.`
+    : `Exceeds current budget by ${currency} ${amountExceeded.toLocaleString()}. Affordable with suggested budget hotel & public transit adjustments.`;
+
   const conclusion = {
-    fitsBudget: true,
-    statusSummary: 'Within Budget',
+    fitsBudget: !isOverBudget,
+    isAffordable,
+    affordableVerdict,
+    statusSummary: isOverBudget ? 'Over Budget' : 'Within Budget',
     estimatedTotalCost: totalEstimated,
-    remainingOrOverBudget: variance >= 0 ? variance : Math.abs(variance),
-    isOverBudget: variance < 0,
-    bestHotel: hotels[0].name,
-    bestActivity: `${destination.split(',')[0]} Sunset Promenade & Heritage Quarter Walk`,
+    remainingBudget: !isOverBudget ? remainingBudget : -amountExceeded,
+    remainingOrOverBudget: isOverBudget ? amountExceeded : remainingBudget,
+    isOverBudget,
+    bestHotel: hotels[0]?.name || 'Central Boutique Stay',
+    bestActivity: `${destination.split(',')[0]} Sunset Promenade & Heritage Highlights`,
     datesSuitable: true,
-    datesSuitabilityNote: `${liveWeather.condition} with temperatures around ${liveWeather.temperature.split(' ')[0]}. Ideal weather conditions for outdoor sightseeing.`,
+    datesSuitabilityNote: `${liveWeather.condition} with temperatures around ${liveWeather.temperature.split(' ')[0]}. Favorable conditions for outdoor sightseeing and dining.`,
+    shortTravelTip: `Buy attraction tickets and rail passes 2–3 weeks online in advance to bypass long ticket lines and secure early-bird discounts.`,
     finalRecommendation: `Book major rail and attraction tickets 2–3 weeks early to lock in lower advance-purchase fares and avoid peak queues.`,
   };
 
@@ -189,9 +208,11 @@ export function generateSmartTripPlan(
       totalEstimated,
       userBudget,
       currency,
-      fitsBudget: true,
+      fitsBudget: !isOverBudget,
       variance,
-      varianceExplanation: 'Carefully apportioned across transport, hotel, dining, and activities with a dedicated 5% emergency buffer.',
+      varianceExplanation: isOverBudget
+        ? `Estimated expenses exceed budget by ${currency} ${amountExceeded.toLocaleString()}. Consider our budget adjustments.`
+        : `Carefully apportioned across transport, hotel, dining, and activities with a dedicated 5% emergency buffer.`,
     },
     hotels,
     weather: liveWeather,

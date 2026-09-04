@@ -704,54 +704,64 @@ export function TripPlanView({ plan, onAskAdjustment }: TripPlanViewProps) {
           </span>
         </div>
 
-        {/* The 7 Explicit Required Points */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        {/* The 6 Explicit Required Conclusion Points */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
           {/* Point 1: Total Estimated Cost */}
           <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-1">
             <span className="text-teal-300 font-semibold block text-[11px] uppercase tracking-wider">
               1. Total Estimated Cost
             </span>
-            <p className="text-base font-bold text-white">
+            <p className="text-lg font-bold text-white">
               {formatCost(budgetBreakdown.totalEstimated)}
             </p>
             <p className="text-slate-300 text-[11px]">
-              Calculated across travel, hotel, dining, local commute, activities, and emergency buffer.
+              Itemized across transport, hotel, dining, local commute, activities, and emergency buffer.
             </p>
           </div>
 
-          {/* Point 2: User's Budget */}
-          <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-1">
-            <span className="text-teal-300 font-semibold block text-[11px] uppercase tracking-wider">
-              2. User's Target Budget
-            </span>
-            <p className="text-base font-bold text-white">
-              {formatCost(effectiveBudget)}
-            </p>
-            <p className="text-slate-300 text-[11px]">
-              Maximum spending target set for {plan.travelers} traveler{plan.travelers > 1 ? 's' : ''}.
-            </p>
-          </div>
-
-          {/* Point 3: Remaining / Extra Amount */}
+          {/* Point 2: Remaining Budget */}
           <div
             className={`p-3.5 rounded-xl border space-y-1 ${
               isOverBudget
-                ? 'bg-rose-500/10 border-rose-500/30 text-rose-200'
-                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                ? 'bg-rose-500/15 border-rose-500/40 text-rose-200'
+                : 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
             }`}
           >
             <span className="font-semibold block text-[11px] uppercase tracking-wider">
-              3. Remaining / Extra Amount
+              2. Remaining Budget
             </span>
-            <p className="text-base font-bold text-white">
+            <p className="text-lg font-bold text-white">
               {isOverBudget
                 ? `-${formatCost(Math.abs(budgetDifference))} (Over Budget)`
                 : `+${formatCost(budgetDifference)} (Remaining Cushion)`}
             </p>
             <p className="text-slate-300 text-[11px]">
               {isOverBudget
-                ? `Extra ${formatCost(Math.abs(budgetDifference))} required unless cheaper options are used.`
-                : `Safe buffer available for shopping, extra dining, or spontaneous activities.`}
+                ? `Exceeds target budget. Use the budget adjustment to cut costs by ${formatCost(Math.abs(budgetDifference))}.`
+                : `Remaining balance preserved safely for souvenirs, treats, or unexpected needs.`}
+            </p>
+          </div>
+
+          {/* Point 3: Affordability Check */}
+          <div
+            className={`p-3.5 rounded-xl border space-y-1 ${
+              isOverBudget
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-100'
+                : 'bg-teal-500/15 border-teal-500/40 text-teal-100'
+            }`}
+          >
+            <span className="font-semibold block text-[11px] uppercase tracking-wider text-teal-300">
+              3. Affordability Verdict
+            </span>
+            <p className="text-sm font-bold text-white flex items-center gap-1.5">
+              {conclusion.isAffordable ? (
+                <span className="text-emerald-400">✓ Highly Affordable</span>
+              ) : (
+                <span className="text-amber-400">⚠️ Needs Budget Adjustments</span>
+              )}
+            </p>
+            <p className="text-slate-300 text-[11px] leading-relaxed">
+              {conclusion.affordableVerdict || (isOverBudget ? `Exceeds budget by ${formatCost(Math.abs(budgetDifference))}` : `Fits within ${formatCost(effectiveBudget)} target.`)}
             </p>
           </div>
 
@@ -760,11 +770,11 @@ export function TripPlanView({ plan, onAskAdjustment }: TripPlanViewProps) {
             <span className="text-teal-300 font-semibold block text-[11px] uppercase tracking-wider">
               4. Best Hotel Option
             </span>
-            <p className="text-sm font-bold text-white">
+            <p className="text-sm font-bold text-white leading-snug">
               {conclusion.bestHotel}
             </p>
             <p className="text-slate-300 text-[11px]">
-              Recommended for best balance of nightly rate, proximity to central transit, and high guest reviews.
+              Top value pick for location convenience, clean amenities, and budget compliance.
             </p>
           </div>
 
@@ -773,7 +783,7 @@ export function TripPlanView({ plan, onAskAdjustment }: TripPlanViewProps) {
             <span className="text-teal-300 font-semibold block text-[11px] uppercase tracking-wider">
               5. Best Highlight Activity
             </span>
-            <p className="text-sm font-bold text-white">
+            <p className="text-sm font-bold text-white leading-snug">
               {conclusion.bestActivity}
             </p>
             <p className="text-slate-300 text-[11px]">
@@ -781,7 +791,7 @@ export function TripPlanView({ plan, onAskAdjustment }: TripPlanViewProps) {
             </p>
           </div>
 
-          {/* Point 6: Weather Suitability */}
+          {/* Point 6: Weather Context */}
           <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-1">
             <span className="text-teal-300 font-semibold block text-[11px] uppercase tracking-wider">
               6. Weather Suitability
@@ -789,19 +799,21 @@ export function TripPlanView({ plan, onAskAdjustment }: TripPlanViewProps) {
             <p className="text-sm font-bold text-white">
               {conclusion.datesSuitable ? '✓ Seasonally Favorable' : '⚠️ Moderate Weather Caution'}
             </p>
-            <p className="text-slate-300 text-[11px] leading-relaxed">
+            <p className="text-slate-300 text-[11px] leading-relaxed line-clamp-2">
               {conclusion.datesSuitabilityNote}
             </p>
           </div>
         </div>
 
-        {/* Point 7: Overall Recommendation */}
-        <div className="p-4 rounded-xl bg-teal-900/50 border border-teal-500/40 text-xs text-teal-100 space-y-1.5">
-          <span className="text-teal-300 font-bold uppercase tracking-wider text-[10px] block">
-            ⭐ 7. Overall Recommendation
-          </span>
+        {/* Short Travel Tip Card */}
+        <div className="p-4 rounded-xl bg-teal-900/60 border border-teal-500/40 text-xs text-teal-100 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1">
+              💡 WanderWise Pro Travel Tip
+            </span>
+          </div>
           <p className="text-sm leading-relaxed text-slate-100 font-medium">
-            {conclusion.finalRecommendation}
+            {conclusion.shortTravelTip || conclusion.finalRecommendation}
           </p>
         </div>
       </section>

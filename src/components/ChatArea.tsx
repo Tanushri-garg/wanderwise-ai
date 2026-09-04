@@ -164,6 +164,57 @@ export function ChatArea({
                     </div>
                   )}
 
+                  {/* Missing Parameters helper banner */}
+                  {isBot && msg.missingParams && msg.missingParams.length > 0 && !msg.tripPlan && (
+                    <div className="p-2.5 rounded-xl bg-teal-50/70 border border-teal-200 text-xs text-teal-900 space-y-1">
+                      <div className="flex items-center gap-1.5 font-semibold text-[11px] text-teal-800">
+                        <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                        <span>Next details needed to generate plan:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {msg.missingParams.map((param, pIdx) => {
+                          const paramLabels: Record<string, string> = {
+                            destination: '📍 Destination',
+                            days: '📅 Number of Days',
+                            travelDates: '🗓️ Travel Dates',
+                            travelers: '👥 Travelers',
+                            budget: '💰 Total Budget',
+                            preferences: '🎯 Preferences',
+                          };
+                          return (
+                            <span
+                              key={pIdx}
+                              className="px-2 py-0.5 rounded-full bg-white border border-teal-200 text-[11px] font-medium text-teal-700 shadow-2xs"
+                            >
+                              {paramLabels[param] || param}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Suggested Quick Prompt Chips */}
+                  {isBot && msg.suggestedPrompts && msg.suggestedPrompts.length > 0 && (
+                    <div className="pt-1 space-y-1">
+                      <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 block px-0.5">
+                        Suggested Replies:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {msg.suggestedPrompts.map((prompt, sIdx) => (
+                          <button
+                            key={sIdx}
+                            type="button"
+                            onClick={() => onSendMessage(prompt)}
+                            className="px-3 py-1 rounded-full bg-white hover:bg-teal-50 hover:border-teal-400 border border-slate-200 text-slate-700 hover:text-teal-800 text-xs font-medium transition-colors shadow-2xs text-left"
+                          >
+                            {prompt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <span className="text-[10px] text-slate-400 block px-1">
                     {msg.timestamp}
                   </span>

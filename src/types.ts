@@ -77,14 +77,18 @@ export interface BudgetAdjustment {
 
 export interface TripConclusion {
   fitsBudget: boolean;
+  isAffordable: boolean;
+  affordableVerdict: string;
   statusSummary: 'Within Budget' | 'Over Budget' | 'Adjusted to Fit' | string;
   estimatedTotalCost: number;
+  remainingBudget: number; // positive = remaining cushion, negative/abs = exceeded amount
   remainingOrOverBudget: number;
   isOverBudget: boolean;
   bestHotel: string;
   bestActivity: string;
   datesSuitable: boolean;
   datesSuitabilityNote: string;
+  shortTravelTip: string;
   finalRecommendation: string;
 }
 
@@ -112,4 +116,6 @@ export interface ChatMessage {
   timestamp: string;
   extractedParams?: TripParameters;
   tripPlan?: CompleteTripPlan;
+  missingParams?: Array<'destination' | 'days' | 'travelDates' | 'travelers' | 'budget' | 'preferences'>;
+  suggestedPrompts?: string[];
 }
