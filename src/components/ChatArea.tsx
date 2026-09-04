@@ -9,6 +9,7 @@ interface ChatAreaProps {
   onSendMessage: (text: string) => void;
   onViewPlan: (plan: CompleteTripPlan) => void;
   latestPlan?: CompleteTripPlan;
+  clearSignal?: number;
 }
 
 const STARTER_PROMPTS = [
@@ -36,6 +37,7 @@ export function ChatArea({
   onSendMessage,
   onViewPlan,
   latestPlan,
+  clearSignal,
 }: ChatAreaProps) {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -45,6 +47,17 @@ export function ChatArea({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
+
+  // When Clear Chat is clicked, wipe input text, reset DOM textarea, and focus
+  useEffect(() => {
+    if (clearSignal !== undefined && clearSignal > 0) {
+      setInputText('');
+      if (inputRef.current) {
+        inputRef.current.value = '';
+        inputRef.current.focus();
+      }
+    }
+  }, [clearSignal]);
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();

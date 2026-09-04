@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { ChatArea } from './components/ChatArea';
 import { TripTrackerCard } from './components/TripTrackerCard';
@@ -6,14 +6,15 @@ import { StandaloneBudgetCalculator } from './components/StandaloneBudgetCalcula
 import { TripPlanView } from './components/TripPlanView';
 import { TripFormModal } from './components/TripFormModal';
 import { ChatMessage, CompleteTripPlan, TripParameters } from './types';
+import { extractParamsFromText } from './utils/tripParams';
 
 const INITIAL_PARAMS: TripParameters = {
   currency: 'USD',
   preferences: ['Sightseeing', 'Food & Dining'],
 };
 
-const INITIAL_MESSAGE: ChatMessage = {
-  id: 'welcome-1',
+const createInitialMessage = (): ChatMessage => ({
+  id: 'welcome-' + Date.now(),
   role: 'assistant',
   content: `Hello! I'm **WanderWise AI**, your personal AI Travel Planner. 🌍✈️
 
@@ -35,7 +36,7 @@ You can type naturally, pick one of the quick suggestions, or use the setup butt
     'Explore Rome, Italy (4 Days, €1,100 EUR)',
     'Relax in Bali, Indonesia (7 Days, $900 USD)',
   ],
-};
+});
 
 export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -43,15 +44,17 @@ export default function App() {
       const saved = localStorage.getItem('wanderwise_messages') || localStorage.getItem('travelmate_messages');
       if (saved) {
         const parsed: ChatMessage[] = JSON.parse(saved);
-        return parsed.map((m) =>
-          m.id === 'welcome-1'
-            ? { ...m, content: INITIAL_MESSAGE.content }
-            : { ...m, content: m.content.replace(/TravelMate/g, 'WanderWise AI') }
-        );
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((m) =>
+            m.id.startsWith('welcome')
+              ? { ...m, content: createInitialMessage().content }
+              : { ...m, content: m.content.replace(/TravelMate/g, 'WanderWise AI') }
+          );
+        }
       }
-      return [INITIAL_MESSAGE];
+      return [createInitialMessage()];
     } catch {
-      return [INITIAL_MESSAGE];
+      return [createInitialMessage()];
     }
   });
 
@@ -76,6 +79,20 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState<'chat' | 'plan'>('chat');
+  const [clearSignal, setClearSignal] = useState<number>(0);
+
+  // Synchronous refs to prevent race conditions & stale closures
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  const paramsRef = useRef<TripParameters>(currentParams);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    paramsRef.current = currentParams;
+  }, [currentParams]);
 
   // Sync to localStorage
   useEffect(() => {
@@ -110,6 +127,13 @@ export default function App() {
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
 
+    // Abort previous request if in-flight
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const userMsg: ChatMessage = {
       id: 'usr-' + Date.now(),
       role: 'user',
@@ -117,35 +141,57 @@ export default function App() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    const newMessages = [...messages, userMsg];
+    // Use latest messages from ref to eliminate stale closure problems
+    const baseMessages = messagesRef.current;
+    const newMessages = [...baseMessages, userMsg];
+    messagesRef.current = newMessages;
     setMessages(newMessages);
     setIsLoading(true);
+
+    // Optimistically extract parameters from user input right away to immediately update UI/Budget Calculator
+    const clientExtracted = extractParamsFromText(text, paramsRef.current);
+    paramsRef.current = clientExtracted;
+    setCurrentParams(clientExtracted);
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           messages: newMessages.map((m) => ({
             role: m.role,
             content: m.content,
           })),
-          currentParams,
+          currentParams: clientExtracted,
         }),
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ error: 'Server error' }));
-        throw new Error(errorData.details || errorData.error || `Error: ${res.status}`);
+        const errorData = await res.json().catch(() => ({}));
+        const rawErr = errorData.userMessage || errorData.details || errorData.error || `Server status ${res.status}`;
+        throw new Error(rawErr);
       }
 
       const data = await res.json();
 
+      // If aborted while request was in-flight, discard and do not touch state
+      if (controller.signal.aborted) return;
+
       if (data.extractedParams) {
-        setCurrentParams((prev) => ({
-          ...prev,
+        const updatedParams: TripParameters = {
+          ...paramsRef.current,
           ...data.extractedParams,
-        }));
+        };
+        // Preserve any user-provided parameters so AI defaults never overwrite them
+        if (clientExtracted.budget) updatedParams.budget = clientExtracted.budget;
+        if (clientExtracted.currency) updatedParams.currency = clientExtracted.currency;
+        if (clientExtracted.days) updatedParams.days = clientExtracted.days;
+        if (clientExtracted.travelers) updatedParams.travelers = clientExtracted.travelers;
+        if (clientExtracted.destination) updatedParams.destination = clientExtracted.destination;
+
+        paramsRef.current = updatedParams;
+        setCurrentParams(updatedParams);
       }
 
       if (data.tripPlan) {
@@ -155,7 +201,7 @@ export default function App() {
       const botMsg: ChatMessage = {
         id: 'bot-' + Date.now(),
         role: 'assistant',
-        content: data.reply || "I've processed your request.",
+        content: data.reply || "I've processed your travel plan details.",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         tripPlan: data.tripPlan || undefined,
         extractedParams: data.extractedParams || undefined,
@@ -163,32 +209,83 @@ export default function App() {
         suggestedPrompts: data.suggestedPrompts || undefined,
       };
 
-      setMessages((prev) => [...prev, botMsg]);
-    } catch (error) {
+      const finalMessages = [...messagesRef.current, botMsg];
+      messagesRef.current = finalMessages;
+      setMessages(finalMessages);
+    } catch (error: any) {
+      if (error?.name === 'AbortError' || controller.signal.aborted) {
+        // Aborted cleanly by Clear Chat or new request
+        return;
+      }
       console.error('Chat error:', error);
+
+      const raw = String((error as Error)?.message || '');
+      let helpfulMessage = 'The AI service experienced a temporary delay. Your trip details have been preserved. Please try sending your message again.';
+
+      if (/rate limit|429|resource_exhausted/i.test(raw)) {
+        helpfulMessage = 'The AI travel service is currently experiencing high demand (Rate Limit). Your trip parameters have been saved. Please wait a moment and try again.';
+      } else if (/api key|unauthenticated|401|403|unauthorized/i.test(raw)) {
+        helpfulMessage = 'The Gemini API key is missing or unauthorized. Please verify the GEMINI_API_KEY environment variable in Settings.';
+      } else if (/timeout|timed out/i.test(raw)) {
+        helpfulMessage = 'The AI service took longer than usual to respond. Your trip details are preserved—please click one of the suggested prompts to retry.';
+      } else if (raw && !raw.includes('Server error') && !raw.includes('500') && !raw.includes('Failed to fetch')) {
+        helpfulMessage = raw;
+      }
+
       const errorMsg: ChatMessage = {
         id: 'err-' + Date.now(),
         role: 'assistant',
-        content: `Sorry, I encountered an issue processing that: ${(error as Error).message}. Please try again or adjust your prompt.`,
+        content: helpfulMessage,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
-      setMessages((prev) => [...prev, errorMsg]);
+      const finalErrorMessages = [...messagesRef.current, errorMsg];
+      messagesRef.current = finalErrorMessages;
+      setMessages(finalErrorMessages);
     } finally {
-      setIsLoading(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setIsLoading(false);
+      }
     }
   };
 
   // Handle Clear Chat
   const handleClearChat = () => {
-    setMessages([INITIAL_MESSAGE]);
-    setCurrentParams(INITIAL_PARAMS);
+    // 1. Abort any ongoing in-flight request immediately
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+
+    // 2. Create fresh initial welcome message
+    const freshInitial = createInitialMessage();
+
+    // 3. Reset sync refs immediately
+    messagesRef.current = [freshInitial];
+    paramsRef.current = { ...INITIAL_PARAMS };
+
+    // 4. Reset React state completely
+    setMessages([freshInitial]);
+    setCurrentParams({ ...INITIAL_PARAMS });
     setCurrentPlan(null);
-    localStorage.removeItem('wanderwise_messages');
-    localStorage.removeItem('wanderwise_params');
-    localStorage.removeItem('wanderwise_plan');
-    localStorage.removeItem('travelmate_messages');
-    localStorage.removeItem('travelmate_params');
-    localStorage.removeItem('travelmate_plan');
+    setIsModalOpen(false);
+    setActiveMobileTab('chat');
+
+    // 5. Trigger Clear Signal for ChatArea to empty input box and focus
+    setClearSignal((prev) => prev + 1);
+
+    // 6. Purge localStorage
+    try {
+      localStorage.removeItem('wanderwise_messages');
+      localStorage.removeItem('wanderwise_params');
+      localStorage.removeItem('wanderwise_plan');
+      localStorage.removeItem('travelmate_messages');
+      localStorage.removeItem('travelmate_params');
+      localStorage.removeItem('travelmate_plan');
+    } catch (e) {
+      console.warn('Failed to clear storage:', e);
+    }
   };
 
   // Quick fill prompt from tracker
@@ -226,6 +323,7 @@ export default function App() {
             onSendMessage={handleSendMessage}
             onViewPlan={handleViewPlan}
             latestPlan={currentPlan || undefined}
+            clearSignal={clearSignal}
           />
         </section>
 
@@ -248,17 +346,33 @@ export default function App() {
               {/* Standalone Interactive Budget Calculator */}
               <StandaloneBudgetCalculator
                 currentParams={currentParams}
-                onApplyBudget={(budget, currency) => {
-                  setCurrentParams((prev) => ({ ...prev, budget, currency }));
+                onApplyBudget={(budget, currency, days, travelers) => {
+                  const updated = {
+                    ...paramsRef.current,
+                    budget,
+                    currency,
+                    ...(days ? { days } : {}),
+                    ...(travelers ? { travelers } : {}),
+                  };
+                  paramsRef.current = updated;
+                  setCurrentParams(updated);
                 }}
-                onPlanTripWithBudget={(budget, currency, days) => {
-                  setCurrentParams((prev) => ({ ...prev, budget, currency, days }));
+                onPlanTripWithBudget={(budget, currency, days, travelers) => {
+                  const numDays = days || paramsRef.current.days || 5;
+                  const numTravelers = travelers || paramsRef.current.travelers || 2;
+                  const updated = {
+                    ...paramsRef.current,
+                    budget,
+                    currency,
+                    days: numDays,
+                    travelers: numTravelers,
+                  };
+                  paramsRef.current = updated;
+                  setCurrentParams(updated);
                   setActiveMobileTab('chat');
-                  const dest = currentParams.destination || 'Tokyo, Japan';
+                  const dest = updated.destination || 'Paris, France';
                   handleSendMessage(
-                    `Plan a ${days}-day trip to ${dest} with a total budget of ${currency} ${budget} for ${
-                      currentParams.travelers || 2
-                    } travelers.`
+                    `Plan a ${numDays}-day trip to ${dest} with a total budget of ${currency} ${budget} for ${numTravelers} travelers.`
                   );
                 }}
               />
@@ -302,10 +416,12 @@ export default function App() {
 
       {/* Quick Trip Setup Modal */}
       <TripFormModal
+        key={`modal-${clearSignal}`}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         currentParams={currentParams}
         onSubmit={(prompt, updatedParams) => {
+          paramsRef.current = updatedParams;
           setCurrentParams(updatedParams);
           handleSendMessage(prompt);
         }}

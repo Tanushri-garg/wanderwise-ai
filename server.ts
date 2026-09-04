@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { generateSmartTripPlan } from './serverFallbackPlanner';
+import { extractParamsFromText, computeMissingRequirements, generateQuickSuggestions } from './src/utils/tripParams';
+import { TripParameters } from './src/types';
 
 dotenv.config();
 
@@ -159,122 +161,6 @@ async function getLiveWeather(city: string, travelDates?: string) {
   }
 }
 
-// Extract parameters from user text
-function extractParamsFromText(text: string, current: any) {
-  const updated = { ...current };
-  const lower = text.toLowerCase();
-
-  // 1. Destination
-  const destMatch = text.match(/(?:to|in|visit|trip to|explore|vacation in|holiday in)\s+([A-Za-z\s,]+?)(?=\s+(?:with|for|from|starting|under|on|around|budget|\$|€|£|₹|\d)|$|[,\.!?])/i);
-  if (destMatch && destMatch[1] && !['the', 'a', 'an', 'my', 'budget', 'some', 'any'].includes(destMatch[1].trim().toLowerCase())) {
-    updated.destination = destMatch[1].trim();
-  }
-
-  // 2. Days
-  const daysMatch = text.match(/(\d+)\s*(?:day|days|night|nights)/i);
-  if (daysMatch) {
-    updated.days = parseInt(daysMatch[1], 10);
-  }
-
-  // 3. Travelers
-  const travelersMatch = text.match(/(\d+)\s*(?:travelers?|people|persons?|guests?|adults?|friends?)/i);
-  if (travelersMatch) {
-    updated.travelers = parseInt(travelersMatch[1], 10);
-  } else if (lower.includes('solo') || lower.includes('just me') || lower.includes('myself')) {
-    updated.travelers = 1;
-  } else if (lower.includes('couple') || lower.includes('partner') || lower.includes('my wife') || lower.includes('my husband')) {
-    updated.travelers = 2;
-  } else if (lower.includes('family')) {
-    if (!updated.travelers) updated.travelers = 4;
-  }
-
-  // 4. Budget & Currency
-  const budgetMatch = text.match(/(?:budget\s*(?:of|is|:)?\s*)?[\$€£₹¥]?\s*(\d+[\d,]*)\s*(?:dollars|usd|eur|inr|gbp|jpy|cad|aud|\$|€|£|₹|¥|budget)?/i);
-  if (budgetMatch) {
-    const val = parseInt(budgetMatch[1].replace(/,/g, ''), 10);
-    if (val > 20) {
-      updated.budget = val;
-    }
-  }
-  if (lower.includes('eur') || text.includes('€')) updated.currency = 'EUR';
-  else if (lower.includes('gbp') || text.includes('£')) updated.currency = 'GBP';
-  else if (lower.includes('inr') || text.includes('₹') || lower.includes('rupee')) updated.currency = 'INR';
-  else if (lower.includes('jpy') || text.includes('¥') || lower.includes('yen')) updated.currency = 'JPY';
-  else if (lower.includes('cad') || lower.includes('c$')) updated.currency = 'CAD';
-  else if (lower.includes('aud') || lower.includes('a$')) updated.currency = 'AUD';
-  else if (lower.includes('usd') || text.includes('$')) updated.currency = 'USD';
-
-  // 5. Travel Dates
-  const dateMatch = text.match(/(?:dates?:|dates|during|around|in)\s+([A-Za-z]+(?:\s+\d{1,2})?(?:\s*-\s*(?:[A-Za-z]+\s+)?\d{1,2})?(?:,?\s*\d{4})?)/i);
-  if (dateMatch && !['the', 'a', 'days', 'hotel', 'food', 'budget', 'usd', 'eur'].includes(dateMatch[1].trim().toLowerCase())) {
-    updated.travelDates = dateMatch[1].trim();
-  } else if (lower.includes('next month')) {
-    updated.travelDates = 'Next Month';
-  } else if (lower.includes('summer')) {
-    updated.travelDates = 'Summer Season';
-  } else if (lower.includes('winter')) {
-    updated.travelDates = 'Winter Season';
-  } else if (lower.includes('spring')) {
-    updated.travelDates = 'Spring Season';
-  } else if (lower.includes('autumn') || lower.includes('fall')) {
-    updated.travelDates = 'Autumn Season';
-  }
-
-  // 6. Preferences
-  const foundPrefs = new Set<string>(updated.preferences || []);
-  if (lower.includes('sightsee') || lower.includes('monument') || lower.includes('landmark') || lower.includes('attractions')) foundPrefs.add('Sightseeing');
-  if (lower.includes('food') || lower.includes('dining') || lower.includes('culinary') || lower.includes('eat') || lower.includes('restaurant')) foundPrefs.add('Food & Dining');
-  if (lower.includes('adventure') || lower.includes('hiking') || lower.includes('hike') || lower.includes('trek') || lower.includes('outdoor')) foundPrefs.add('Adventure');
-  if (lower.includes('shop') || lower.includes('shopping') || lower.includes('boutique') || lower.includes('market')) foundPrefs.add('Shopping');
-  if (lower.includes('relax') || lower.includes('relaxation') || lower.includes('spa') || lower.includes('beach') || lower.includes('chill')) foundPrefs.add('Relaxation');
-  if (lower.includes('art') || lower.includes('museum') || lower.includes('culture') || lower.includes('history') || lower.includes('heritage')) foundPrefs.add('Art & Culture');
-
-  if (foundPrefs.size > 0) {
-    updated.preferences = Array.from(foundPrefs);
-  }
-
-  return updated;
-}
-
-function computeMissingRequirements(p: any) {
-  const missing: Array<'destination' | 'days' | 'travelDates' | 'travelers' | 'budget' | 'preferences'> = [];
-  if (!p.destination) missing.push('destination');
-  if (!p.days) missing.push('days');
-  if (!p.travelDates) missing.push('travelDates');
-  if (!p.travelers) missing.push('travelers');
-  if (!p.budget) missing.push('budget');
-  if (!p.preferences || p.preferences.length === 0) missing.push('preferences');
-  return missing;
-}
-
-function generateQuickSuggestions(missing: string[], current: any) {
-  const suggestions: string[] = [];
-  if (missing.includes('destination')) {
-    return ['Trip to Tokyo, Japan', 'Trip to Paris, France', 'Explore Rome, Italy', 'Trip to Bali, Indonesia'];
-  }
-  if (missing.includes('days')) {
-    suggestions.push('3 Days', '5 Days', '7 Days');
-  }
-  if (missing.includes('budget')) {
-    const cur = current.currency || 'USD';
-    const sym = cur === 'EUR' ? '€' : cur === 'GBP' ? '£' : cur === 'INR' ? '₹' : '$';
-    suggestions.push(`${sym}800 ${cur}`, `${sym}1,500 ${cur}`, `${sym}2,500 ${cur}`);
-  }
-  if (missing.includes('travelers')) {
-    suggestions.push('1 Solo Traveler', '2 Travelers', '4 Family Members');
-  }
-  if (missing.includes('preferences')) {
-    suggestions.push('🏛️ Sightseeing & Food', '🧗 Adventure & Outdoors', '🌴 Relaxation & Spa', '🛍️ Shopping & Culture');
-  }
-  if (missing.includes('travelDates')) {
-    suggestions.push('Next Month', 'Flexible Upcoming Dates', 'Spring 2026');
-  }
-  if (current.destination && (current.days || current.budget)) {
-    suggestions.push('🚀 Plan My Trip with current details');
-  }
-  return suggestions.slice(0, 5);
-}
-
 // Live Weather Endpoint using Open-Meteo
 app.get('/api/weather', async (req, res) => {
   const city = req.query.city as string;
@@ -311,6 +197,7 @@ app.post('/api/chat', async (req, res) => {
     const diff = userBudget - totalEst;
     const amountExceeded = isOver ? Math.abs(diff) : 0;
     const remainingBudget = !isOver ? diff : -amountExceeded;
+    const planCurrency = plan.currency || mergedParams.currency || 'USD';
 
     plan.budgetBreakdown = {
       transportation: b.transportation || Math.round(userBudget * 0.25),
@@ -321,22 +208,25 @@ app.post('/api/chat', async (req, res) => {
       emergency: b.emergency || Math.round(userBudget * 0.05),
       totalEstimated: totalEst > 0 ? totalEst : userBudget,
       userBudget,
-      currency: plan.currency || mergedParams.currency || 'USD',
+      currency: planCurrency,
       fitsBudget: !isOver,
       variance: diff,
       varianceExplanation: isOver
-        ? `Estimated expenses exceed your target budget by ${plan.currency || 'USD'} ${amountExceeded.toLocaleString()}. See budget adjustments below.`
+        ? `Estimated expenses exceed your target budget by ${planCurrency} ${amountExceeded.toLocaleString()}. See budget adjustments below.`
         : `Calculated with 6 balanced categories and a dedicated emergency buffer.`,
     };
 
     // Ensure 2-3 hotels with all required properties
+    const city = plan.destination || mergedParams.destination || 'Destination';
+    const cityClean = typeof city === 'string' ? city.split(',')[0].trim() : 'Central';
+    const tripDays = plan.days || mergedParams.days || 3;
+
     if (!plan.hotels || plan.hotels.length === 0) {
-      const city = plan.destination || 'Destination';
       plan.hotels = [
         {
           id: 'h1',
-          name: `${city.split(',')[0]} Central Heritage Boutique`,
-          pricePerNight: Math.round(plan.budgetBreakdown.hotel / (plan.days || 3)),
+          name: `${cityClean} Central Heritage Boutique`,
+          pricePerNight: Math.round(plan.budgetBreakdown.hotel / tripDays),
           totalCost: plan.budgetBreakdown.hotel,
           category: 'Mid-range',
           location: 'City Center / Historic Quarter',
@@ -347,7 +237,7 @@ app.post('/api/chat', async (req, res) => {
         {
           id: 'h2',
           name: `The Urban Traveler Micro-Hotel`,
-          pricePerNight: Math.round((plan.budgetBreakdown.hotel * 0.7) / (plan.days || 3)),
+          pricePerNight: Math.round((plan.budgetBreakdown.hotel * 0.7) / tripDays),
           totalCost: Math.round(plan.budgetBreakdown.hotel * 0.7),
           category: 'Budget',
           location: 'Arts District / Near Metro Station',
@@ -357,7 +247,6 @@ app.post('/api/chat', async (req, res) => {
         },
       ];
     } else {
-      // Mark isLivePrice false to never mislead
       plan.hotels = plan.hotels.map((h: any) => ({
         ...h,
         isLivePrice: false,
@@ -389,33 +278,32 @@ app.post('/api/chat', async (req, res) => {
         needed: true,
         originalCost: totalEst,
         targetBudget: userBudget,
-        explanation: `Estimated costs exceed budget by ${plan.currency} ${amountExceeded.toLocaleString()}. We suggest swapping to budget lodging and using local transit day passes.`,
-        cheaperHotelsSuggestion: `Switch to ${cheapHotel.name} (~${plan.currency} ${cheapHotel.pricePerNight}/night) to save up to 30% on accommodations.`,
+        explanation: `Estimated costs exceed budget by ${planCurrency} ${amountExceeded.toLocaleString()}. We suggest swapping to budget lodging and using local transit day passes.`,
+        cheaperHotelsSuggestion: `Switch to ${cheapHotel?.name || 'budget lodging'} (~${planCurrency} ${cheapHotel?.pricePerNight || 60}/night) to save up to 30% on accommodations.`,
         cheaperTransportSuggestion: 'Purchase a multi-day unlimited city transit pass instead of point-to-point taxis.',
         removedOrReplacedActivities: 'Replace paid viewing decks and private tours with free scenic viewpoints, public parks, and self-guided audio walks.',
-        revisedSavings: `Estimated savings: approx. ${plan.currency} ${Math.round(amountExceeded * 1.15)}, bringing the trip back under your ${plan.currency} ${userBudget} ceiling.`,
+        revisedSavings: `Estimated savings: approx. ${planCurrency} ${Math.round(amountExceeded * 1.15)}, bringing the trip back under your ${planCurrency} ${userBudget} ceiling.`,
       };
     } else if (!plan.budgetAdjustment) {
       plan.budgetAdjustment = {
         needed: false,
         originalCost: totalEst,
         targetBudget: userBudget,
-        explanation: `Your trip fits within your ${plan.currency} ${userBudget.toLocaleString()} budget with a cushion of ${plan.currency} ${remainingBudget.toLocaleString()}.`,
+        explanation: `Your trip fits within your ${planCurrency} ${userBudget.toLocaleString()} budget with a cushion of ${planCurrency} ${remainingBudget.toLocaleString()}.`,
         cheaperHotelsSuggestion: 'For extra savings, consider boutique micro-hotels near transit hubs.',
         cheaperTransportSuggestion: 'Utilize regional transit day passes for discounted travel.',
         removedOrReplacedActivities: 'Many suggested architectural strolls and public parks are 100% free.',
-        revisedSavings: `Surplus reserve: ${plan.currency} ${remainingBudget.toLocaleString()}`,
+        revisedSavings: `Surplus reserve: ${planCurrency} ${remainingBudget.toLocaleString()}`,
       };
     }
 
-    // Trip Conclusion with all 6 required elements:
-    // 1. Total estimated cost, 2. Remaining budget, 3. Best hotel option, 4. Best activity, 5. Whether trip is affordable, 6. One short travel tip
+    // Trip Conclusion with all 6 required elements
     const bestHotelName = plan.hotels[0]?.name || 'Central Boutique Hotel';
-    const bestActivityName = plan.itinerary?.[0]?.evening?.activity || `${plan.destination.split(',')[0]} Sunset Promenade & Heritage Quarter`;
+    const bestActivityName = plan.itinerary?.[0]?.evening?.activity || `${cityClean} Sunset Promenade & Heritage Quarter`;
     const isAffordable = !isOver || amountExceeded <= userBudget * 0.1;
     const affordableVerdict = !isOver
-      ? `Yes, highly affordable! Fits comfortably within your ${plan.currency} ${userBudget.toLocaleString()} budget with ${plan.currency} ${remainingBudget.toLocaleString()} cushion.`
-      : `Exceeds current budget by ${plan.currency} ${amountExceeded.toLocaleString()}. Affordable with recommended budget accommodation & transit pass adjustments.`;
+      ? `Yes, highly affordable! Fits comfortably within your ${planCurrency} ${userBudget.toLocaleString()} budget with ${planCurrency} ${remainingBudget.toLocaleString()} cushion.`
+      : `Exceeds current budget by ${planCurrency} ${amountExceeded.toLocaleString()}. Affordable with recommended budget accommodation & transit pass adjustments.`;
 
     const shortTravelTip = plan.conclusion?.shortTravelTip ||
       plan.conclusion?.finalRecommendation ||
@@ -443,7 +331,7 @@ app.post('/api/chat', async (req, res) => {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    // High-quality local intelligence fallback
+    // High-quality local intelligence fallback when GEMINI_API_KEY is not configured
     const hasCoreDetails = mergedParams.destination && (mergedParams.days || mergedParams.budget);
     const wantsPlan = lastUserMsg.toLowerCase().includes('plan') || lastUserMsg.toLowerCase().includes('trip') || lastUserMsg.toLowerCase().includes('itinerary') || hasCoreDetails;
 
@@ -520,6 +408,7 @@ YOUR CORE MISSION & THE 10 MANDATORY CAPABILITIES:
 
 2. GENERATE A COMPLETE PERSONALIZED TRAVEL PLAN:
    When the user provides enough core details (at least destination, days, budget, or asks to plan/generate), create a comprehensive travel plan matching their budget and preferences.
+   CRITICAL: Do NOT replace user-provided values with default values such as $1200 or 3 days. Preserve exactly the budget, days, travelers, destination, and currency provided by the user.
 
 3. DIVIDE THE BUDGET INTO THE 6 EXACT CATEGORIES:
    - Transportation (flights/trains between origin and destination)
@@ -592,28 +481,67 @@ Current gathered user parameters: ${JSON.stringify(mergedParams || {})}
 Missing requirements: ${JSON.stringify(missingRequirements)}
 `;
 
-    // Construct history for Gemini
-    const contents = messages.map((m: { role: string; content: string }) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }));
+    // Construct valid turns for Gemini:
+    // 1. Drop leading assistant messages so first turn is always 'user'
+    // 2. Strict alternating turns (user -> model -> user -> model)
+    const validTurns: Array<{ role: 'user' | 'model'; parts: [{ text: string }] }> = [];
+    let hasStartedUser = false;
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AI generation timed out (initiating smart planner)')), 11000)
-    );
+    for (const m of messages) {
+      if (!m.content || typeof m.content !== 'string' || !m.content.trim()) continue;
+      const role: 'user' | 'model' = m.role === 'assistant' ? 'model' : 'user';
+      if (!hasStartedUser) {
+        if (role === 'user') {
+          hasStartedUser = true;
+          validTurns.push({ role: 'user', parts: [{ text: m.content }] });
+        }
+      } else {
+        const last = validTurns[validTurns.length - 1];
+        if (last && last.role === role) {
+          last.parts[0].text += `\n\n${m.content}`;
+        } else {
+          validTurns.push({ role, parts: [{ text: m.content }] });
+        }
+      }
+    }
 
-    const response = await Promise.race([
-      ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents,
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          temperature: 0.7,
-        },
-      }),
-      timeoutPromise,
-    ]);
+    if (validTurns.length === 0) {
+      validTurns.push({ role: 'user', parts: [{ text: lastUserMsg || 'Hello' }] });
+    }
+
+    let response: any;
+    let lastError: any = null;
+
+    // Retry loop with 25s timeout
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        response = await Promise.race([
+          ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: validTurns,
+            config: {
+              systemInstruction,
+              responseMimeType: 'application/json',
+              temperature: 0.7,
+            },
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('AI generation timed out')), 25000)
+          ),
+        ]);
+        if (response) break;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Gemini attempt ${attempt} failed:`, err?.message || err);
+        if (attempt === 1) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+    }
+
+    if (!response) {
+      throw lastError || new Error('No response from Gemini API');
+    }
 
     const responseText = response.text || '{}';
     let parsedData: any;
@@ -632,11 +560,37 @@ Missing requirements: ${JSON.stringify(missingRequirements)}
       }
     }
 
-    // Merge extracted parameters
-    const finalParams = {
-      ...mergedParams,
-      ...(parsedData.extractedParams || {}),
-    };
+    // Merge extracted parameters CAREFULLY:
+    // Never overwrite user-provided values with null, undefined, or defaults
+    const finalParams: TripParameters = { ...mergedParams };
+    if (parsedData.extractedParams && typeof parsedData.extractedParams === 'object') {
+      const ep = parsedData.extractedParams;
+      if (ep.destination && typeof ep.destination === 'string' && ep.destination.trim() && !finalParams.destination) {
+        finalParams.destination = ep.destination.trim();
+      }
+      if (ep.startingCity && typeof ep.startingCity === 'string' && ep.startingCity.trim() && !finalParams.startingCity) {
+        finalParams.startingCity = ep.startingCity.trim();
+      }
+      if (ep.travelDates && typeof ep.travelDates === 'string' && ep.travelDates.trim() && !finalParams.travelDates) {
+        finalParams.travelDates = ep.travelDates.trim();
+      }
+      if (typeof ep.days === 'number' && ep.days > 0 && !finalParams.days) {
+        finalParams.days = ep.days;
+      }
+      if (typeof ep.travelers === 'number' && ep.travelers > 0 && !finalParams.travelers) {
+        finalParams.travelers = ep.travelers;
+      }
+      if (typeof ep.budget === 'number' && ep.budget > 0 && !finalParams.budget) {
+        finalParams.budget = ep.budget;
+      }
+      if (ep.currency && typeof ep.currency === 'string' && ep.currency.trim()) {
+        finalParams.currency = ep.currency.trim().toUpperCase();
+      }
+      if (Array.isArray(ep.preferences) && ep.preferences.length > 0) {
+        finalParams.preferences = Array.from(new Set([...(finalParams.preferences || []), ...ep.preferences]));
+      }
+    }
+
     parsedData.extractedParams = finalParams;
     parsedData.missingParams = computeMissingRequirements(finalParams);
     if (!parsedData.suggestedPrompts || parsedData.suggestedPrompts.length === 0) {
@@ -649,49 +603,92 @@ Missing requirements: ${JSON.stringify(missingRequirements)}
     }
 
     return res.json(parsedData);
-  } catch (error: unknown) {
-    console.warn('Gemini API call fallback to smart planner:', error);
+  } catch (error: any) {
+    console.warn('Gemini API call encountered error; providing graceful recovery:', error?.message || error);
+
+    const errMsg = String(error?.message || error || '');
+    const isRateLimit = error?.status === 429 || /429|RESOURCE_EXHAUSTED|quota|rate limit/i.test(errMsg);
+    const isAuthError = error?.status === 401 || error?.status === 403 || /API_KEY_INVALID|UNAUTHENTICATED|PERMISSION_DENIED|invalid api key/i.test(errMsg);
+    const isTimeout = /timed out/i.test(errMsg);
+
     try {
       const city = mergedParams.destination || 'Paris, France';
-      const liveWeather = await getLiveWeather(city, mergedParams.travelDates);
-      const rawPlan = generateSmartTripPlan(mergedParams, liveWeather);
-      const enrichedPlan = await enrichAndValidatePlan(rawPlan);
+      const hasCoreDetails = mergedParams.destination && (mergedParams.days || mergedParams.budget);
+      const wantsPlan = lastUserMsg.toLowerCase().includes('plan') || lastUserMsg.toLowerCase().includes('trip') || lastUserMsg.toLowerCase().includes('itinerary') || hasCoreDetails;
 
-      const isOver = enrichedPlan.budgetBreakdown.totalEstimated > enrichedPlan.userBudget;
-      const diff = Math.abs(enrichedPlan.userBudget - enrichedPlan.budgetBreakdown.totalEstimated);
+      if (wantsPlan || hasCoreDetails) {
+        const liveWeather = await getLiveWeather(city, mergedParams.travelDates);
+        const rawPlan = generateSmartTripPlan(mergedParams, liveWeather);
+        const enrichedPlan = await enrichAndValidatePlan(rawPlan);
 
-      let reply = `### ✈️ WanderWise AI Trip Plan for ${enrichedPlan.destination} (${enrichedPlan.days} Days)\n\n`;
-      reply += `Here is your personalized budget-conscious travel plan based on your target budget of **${enrichedPlan.currency} ${enrichedPlan.userBudget.toLocaleString()}**.\n\n`;
-      reply += `| Category | Estimated Cost | Share |\n| :--- | :--- | :--- |\n`;
-      reply += `| 🛫 Transportation | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.transportation.toLocaleString()} | 25% |\n`;
-      reply += `| 🏨 Hotel | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.hotel.toLocaleString()} | 35% |\n`;
-      reply += `| 🍽️ Food & Dining | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.food.toLocaleString()} | 20% |\n`;
-      reply += `| 🚇 Local Transport | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.localTransport.toLocaleString()} | 6% |\n`;
-      reply += `| 🎟️ Activities | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.activities.toLocaleString()} | 9% |\n`;
-      reply += `| 🛡️ Emergency Reserve | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.emergency.toLocaleString()} | 5% |\n`;
-      reply += `| **Total** | **${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.totalEstimated.toLocaleString()}** | **100%** |\n\n`;
+        const isOver = enrichedPlan.budgetBreakdown.totalEstimated > enrichedPlan.userBudget;
+        const diff = Math.abs(enrichedPlan.userBudget - enrichedPlan.budgetBreakdown.totalEstimated);
 
-      if (isOver) {
-        reply += `⚠️ **Budget Alert: Exceeds Budget by ${enrichedPlan.currency} ${diff.toLocaleString()}**\n`;
-        reply += `> ${enrichedPlan.budgetAdjustment.explanation}\n\n`;
-      } else {
-        reply += `✅ **Budget Status: Fits Within Budget!** Remaining cushion: **${enrichedPlan.currency} ${diff.toLocaleString()}**.\n\n`;
+        let notice = '';
+        if (isRateLimit) {
+          notice = `> ℹ️ *Note: The Gemini AI service reached a temporary rate limit. WanderWise AI has seamlessly used our Smart Planner to generate your customized trip plan without delay.*\n\n`;
+        } else if (isAuthError) {
+          notice = `> ℹ️ *Note: Operating in Smart Offline Planner mode (API key verification required in Settings).*\n\n`;
+        } else if (isTimeout) {
+          notice = `> ℹ️ *Note: Gemini AI generation timed out. WanderWise AI has seamlessly compiled your itinerary using our Smart Planner.*\n\n`;
+        }
+
+        let reply = notice + `### ✈️ WanderWise AI Trip Plan for ${enrichedPlan.destination} (${enrichedPlan.days} Days)\n\n`;
+        reply += `Here is your personalized budget-conscious travel plan based on your target budget of **${enrichedPlan.currency} ${enrichedPlan.userBudget.toLocaleString()}**.\n\n`;
+        reply += `| Category | Estimated Cost | Share |\n| :--- | :--- | :--- |\n`;
+        reply += `| 🛫 Transportation | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.transportation.toLocaleString()} | 25% |\n`;
+        reply += `| 🏨 Hotel | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.hotel.toLocaleString()} | 35% |\n`;
+        reply += `| 🍽️ Food & Dining | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.food.toLocaleString()} | 20% |\n`;
+        reply += `| 🚇 Local Transport | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.localTransport.toLocaleString()} | 6% |\n`;
+        reply += `| 🎟️ Activities | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.activities.toLocaleString()} | 9% |\n`;
+        reply += `| 🛡️ Emergency Reserve | ${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.emergency.toLocaleString()} | 5% |\n`;
+        reply += `| **Total** | **${enrichedPlan.currency} ${enrichedPlan.budgetBreakdown.totalEstimated.toLocaleString()}** | **100%** |\n\n`;
+
+        if (isOver) {
+          reply += `⚠️ **Budget Alert: Exceeds Budget by ${enrichedPlan.currency} ${diff.toLocaleString()}**\n`;
+          reply += `> ${enrichedPlan.budgetAdjustment.explanation}\n\n`;
+        } else {
+          reply += `✅ **Budget Status: Fits Within Budget!** Remaining cushion: **${enrichedPlan.currency} ${diff.toLocaleString()}**.\n\n`;
+        }
+
+        reply += `💡 **Trip Conclusion & Tip**:\n- **Best Hotel:** ${enrichedPlan.conclusion.bestHotel}\n- **Best Activity:** ${enrichedPlan.conclusion.bestActivity}\n- **Affordability:** ${enrichedPlan.conclusion.affordableVerdict}\n- **Short Travel Tip:** ${enrichedPlan.conclusion.shortTravelTip}\n\n*Check the interactive cards and day-by-day itinerary in the trip panel!*`;
+
+        return res.json({
+          reply,
+          extractedParams: mergedParams,
+          missingParams: computeMissingRequirements(mergedParams),
+          suggestedPrompts: generateQuickSuggestions(computeMissingRequirements(mergedParams), mergedParams),
+          tripPlan: enrichedPlan,
+        });
       }
 
-      reply += `💡 **Trip Conclusion & Tip**:\n- **Best Hotel:** ${enrichedPlan.conclusion.bestHotel}\n- **Best Activity:** ${enrichedPlan.conclusion.bestActivity}\n- **Affordability:** ${enrichedPlan.conclusion.affordableVerdict}\n- **Short Travel Tip:** ${enrichedPlan.conclusion.shortTravelTip}\n\n*Check the interactive cards and day-by-day itinerary in the trip panel!*`;
+      // Friendly conversational response for queries when AI is temporarily unavailable
+      let helpfulReply = '';
+      if (isRateLimit) {
+        helpfulReply = `The AI service is currently experiencing high demand and reached a temporary rate limit. Your trip details have been safely recorded. Please wait a moment and try again, or click one of the suggested prompts below to plan your trip.`;
+      } else if (isAuthError) {
+        helpfulReply = `The Gemini API key is not configured or unauthorized. Please verify the \`GEMINI_API_KEY\` in Settings. In the meantime, I can still generate complete travel itineraries using our built-in Smart Planner.`;
+      } else if (isTimeout) {
+        helpfulReply = `The AI service took longer than expected to respond. Your trip details are preserved. Please click one of the suggestions below to retry.`;
+      } else {
+        helpfulReply = `I experienced a temporary connection delay with the AI service. Your trip details are saved. Please try asking again in a moment.`;
+      }
 
       return res.json({
-        reply,
+        reply: helpfulReply,
         extractedParams: mergedParams,
-        missingParams: missingRequirements,
-        suggestedPrompts: quickSuggestions,
-        tripPlan: enrichedPlan,
+        missingParams: computeMissingRequirements(mergedParams),
+        suggestedPrompts: generateQuickSuggestions(computeMissingRequirements(mergedParams), mergedParams),
+        tripPlan: null,
       });
     } catch (fallbackError) {
       console.error('Fallback plan generation failed:', fallbackError);
-      return res.status(500).json({
-        error: 'Failed to generate travel plan.',
-        details: String(error),
+      return res.status(200).json({
+        reply: 'The AI travel service experienced a temporary error. Your trip parameters have been preserved—please try sending your request again.',
+        extractedParams: mergedParams,
+        missingParams: computeMissingRequirements(mergedParams),
+        suggestedPrompts: ['3 Days in Paris', '5 Days in Tokyo', 'Budget: $2,500 USD'],
+        tripPlan: null,
       });
     }
   }

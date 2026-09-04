@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Calculator,
   DollarSign,
@@ -18,8 +18,8 @@ import { TripParameters } from '../types';
 
 interface StandaloneBudgetCalculatorProps {
   currentParams: TripParameters;
-  onApplyBudget: (budget: number, currency: string) => void;
-  onPlanTripWithBudget: (budget: number, currency: string, days: number) => void;
+  onApplyBudget: (budget: number, currency: string, days?: number, travelers?: number) => void;
+  onPlanTripWithBudget: (budget: number, currency: string, days: number, travelers?: number) => void;
 }
 
 export function StandaloneBudgetCalculator({
@@ -28,14 +28,32 @@ export function StandaloneBudgetCalculator({
   onPlanTripWithBudget,
 }: StandaloneBudgetCalculatorProps) {
   const [budgetInput, setBudgetInput] = useState<string>(
-    (currentParams.budget || 1200).toString()
+    currentParams.budget !== undefined && currentParams.budget !== null
+      ? currentParams.budget.toString()
+      : '2500'
   );
   const [currency, setCurrency] = useState<string>(currentParams.currency || 'USD');
-  const [days, setDays] = useState<number>(currentParams.days || 3);
+  const [days, setDays] = useState<number>(currentParams.days || 5);
   const [travelers, setTravelers] = useState<number>(currentParams.travelers || 2);
 
+  // Synchronize when currentParams updates (e.g. from chat inputs or quick setup)
+  useEffect(() => {
+    if (currentParams.budget !== undefined && currentParams.budget !== null) {
+      setBudgetInput(currentParams.budget.toString());
+    }
+    if (currentParams.currency) {
+      setCurrency(currentParams.currency);
+    }
+    if (currentParams.days !== undefined && currentParams.days !== null) {
+      setDays(currentParams.days);
+    }
+    if (currentParams.travelers !== undefined && currentParams.travelers !== null) {
+      setTravelers(currentParams.travelers);
+    }
+  }, [currentParams.budget, currentParams.currency, currentParams.days, currentParams.travelers]);
+
   // Custom adjustments simulation
-  const numBudget = Math.max(0, parseInt(budgetInput, 10) || 0);
+  const numBudget = Math.max(0, parseInt(budgetInput, 10) || (currentParams.budget ?? 0));
 
   // Benchmark minimum realistic costs per day per traveler based on destination
   const minCostPerDayPerPerson = 60; // rough baseline for modest travel
@@ -78,11 +96,11 @@ export function StandaloneBudgetCalculator({
   };
 
   const handleUpdate = () => {
-    onApplyBudget(numBudget, currency);
+    onApplyBudget(numBudget, currency, days, travelers);
   };
 
   const handlePlanClick = () => {
-    onPlanTripWithBudget(numBudget, currency, days);
+    onPlanTripWithBudget(numBudget, currency, days, travelers);
   };
 
   return (

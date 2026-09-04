@@ -95,8 +95,13 @@ export function Header({
 
           <button
             id="clear-chat-btn"
-            onClick={onClearChat}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-rose-600 bg-rose-50 hover:bg-rose-100/80 transition-colors border border-rose-200/60"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClearChat();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-rose-600 bg-rose-50 hover:bg-rose-100/80 transition-colors border border-rose-200/60 cursor-pointer select-none"
             title="Clear Chat history"
           >
             <Trash2 className="w-3.5 h-3.5" />

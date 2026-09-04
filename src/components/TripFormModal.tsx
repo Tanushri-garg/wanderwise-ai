@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, MapPin, PlaneTakeoff, Calendar, Users, DollarSign, Tag, Sparkles } from 'lucide-react';
 import { TripParameters } from '../types';
 
@@ -33,13 +33,37 @@ export function TripFormModal({
   const [destination, setDestination] = useState(currentParams.destination || '');
   const [startingCity, setStartingCity] = useState(currentParams.startingCity || '');
   const [travelDates, setTravelDates] = useState(currentParams.travelDates || '');
-  const [days, setDays] = useState(currentParams.days?.toString() || '4');
-  const [travelers, setTravelers] = useState(currentParams.travelers?.toString() || '2');
-  const [budget, setBudget] = useState(currentParams.budget?.toString() || '1200');
+  const [days, setDays] = useState(
+    currentParams.days !== undefined && currentParams.days !== null ? currentParams.days.toString() : ''
+  );
+  const [travelers, setTravelers] = useState(
+    currentParams.travelers !== undefined && currentParams.travelers !== null ? currentParams.travelers.toString() : ''
+  );
+  const [budget, setBudget] = useState(
+    currentParams.budget !== undefined && currentParams.budget !== null ? currentParams.budget.toString() : ''
+  );
   const [currency, setCurrency] = useState(currentParams.currency || 'USD');
   const [preferences, setPreferences] = useState<string[]>(
-    currentParams.preferences || ['Sightseeing', 'Food & Dining']
+    currentParams.preferences && currentParams.preferences.length > 0
+      ? currentParams.preferences
+      : ['Sightseeing', 'Food & Dining']
   );
+
+  // Sync state whenever modal opens or currentParams updates from chat
+  useEffect(() => {
+    if (isOpen) {
+      setDestination(currentParams.destination || '');
+      setStartingCity(currentParams.startingCity || '');
+      setTravelDates(currentParams.travelDates || '');
+      setDays(currentParams.days !== undefined && currentParams.days !== null ? currentParams.days.toString() : '');
+      setTravelers(currentParams.travelers !== undefined && currentParams.travelers !== null ? currentParams.travelers.toString() : '');
+      setBudget(currentParams.budget !== undefined && currentParams.budget !== null ? currentParams.budget.toString() : '');
+      setCurrency(currentParams.currency || 'USD');
+      if (currentParams.preferences && currentParams.preferences.length > 0) {
+        setPreferences(currentParams.preferences);
+      }
+    }
+  }, [isOpen, currentParams]);
 
   if (!isOpen) return null;
 
@@ -53,9 +77,9 @@ export function TripFormModal({
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsedDays = parseInt(days, 10) || 3;
-    const parsedTravelers = parseInt(travelers, 10) || 1;
-    const parsedBudget = parseInt(budget, 10) || 1000;
+    const parsedDays = parseInt(days, 10) || currentParams.days || 3;
+    const parsedTravelers = parseInt(travelers, 10) || currentParams.travelers || 2;
+    const parsedBudget = parseInt(budget, 10) || currentParams.budget || 1200;
 
     const updatedParams: TripParameters = {
       destination: destination.trim(),
