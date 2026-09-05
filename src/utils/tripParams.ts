@@ -176,21 +176,30 @@ export function extractParamsFromText(text: string, current: Partial<TripParamet
   }
 
   // 6. DESTINATION
-  // Check A: Look for known popular destinations anywhere in the text (word-bounded) first for highest accuracy
+  // First check if the message is primarily a question or greeting
+  const isQuestionOrGreeting =
+    /^(?:what|where|when|why|who|how|is|can|could|would|will|should|are|do|does|did|tell|explain|hello|hi|hey|greetings|bonjour|good\s+(?:morning|afternoon|evening))\b/i.test(raw) ||
+    raw.includes('?');
+
   let extractedDest: string | null = null;
+
+  // Check A: Look for known popular destinations anywhere in the text (word-bounded) first for highest accuracy
   for (const city of POPULAR_DESTINATIONS) {
     const cityRegex = new RegExp(`\\b${city}\\b`, 'i');
     if (cityRegex.test(raw)) {
       // Ensure it wasn't captured as starting city
       if (!updated.startingCity || !updated.startingCity.toLowerCase().includes(city.toLowerCase())) {
-        extractedDest = city;
-        break;
+        // If it's an informational question asking about the destination (e.g. "What is the capital of France?"), do not treat it as an active trip plan request
+        if (!isQuestionOrGreeting || /trip|plan|visit|travel|flight|hotel/i.test(raw)) {
+          extractedDest = city;
+          break;
+        }
       }
     }
   }
 
   // Check B: Explicit prepositions: "trip to Paris", "to Paris", "in Paris", "visit Paris", "destination is Paris", "destination: Paris"
-  if (!extractedDest) {
+  if (!extractedDest && !isQuestionOrGreeting) {
     const destMatch = raw.match(/(?:destination\s*(?:is|:)?|want\s+to\s+visit|plan\s+a\s+trip\s+to|trip\s+to|going\s+to|head\s+to|travel\s+to|visit|visiting|explore|exploring|vacation\s+in|holiday\s+in|in|to)\s+([A-Za-z\s,]+?)(?=\s+(?:with|for|from|starting|under|on|around|dates|budget|starting\s+from|\$|€|£|₹|\d)|$|[,\.!?])/i);
     if (destMatch && destMatch[1]) {
       let candidate = destMatch[1].trim();
@@ -204,21 +213,23 @@ export function extractParamsFromText(text: string, current: Partial<TripParamet
 
   // Check C: If comma-separated tokens exist (e.g. "$2,500 USD, 5 days, 2 travelers, Paris")
   // Check tokens that have no digits, are not keywords, and are clean strings
-  if (!extractedDest) {
+  if (!extractedDest && !isQuestionOrGreeting) {
     const segments = raw.split(/[,;\n]/);
-    for (const seg of segments) {
-      const trimmed = seg.trim();
-      if (
-        trimmed.length >= 2 &&
-        trimmed.length <= 40 &&
-        !/\d/.test(trimmed) &&
-        !/\b(?:days?|nights?|travelers?|people|budget|usd|eur|gbp|inr|jpy|cad|aud|dollars?|euros?|solo|couple|family|sightseeing|food|adventure|relaxation|shopping)\b/i.test(trimmed)
-      ) {
-        // Clean out any leading "in " or "visit "
-        const cleaned = trimmed.replace(/^(?:in|visit|explore|to)\s+/i, '').trim();
-        if (cleaned.length >= 2) {
-          extractedDest = cleaned;
-          break;
+    if (segments.length > 1) {
+      for (const seg of segments) {
+        const trimmed = seg.trim();
+        if (
+          trimmed.length >= 2 &&
+          trimmed.length <= 40 &&
+          !/\d/.test(trimmed) &&
+          !/\b(?:days?|nights?|travelers?|people|budget|usd|eur|gbp|inr|jpy|cad|aud|dollars?|euros?|solo|couple|family|sightseeing|food|adventure|relaxation|shopping)\b/i.test(trimmed)
+        ) {
+          // Clean out any leading "in " or "visit "
+          const cleaned = trimmed.replace(/^(?:in|visit|explore|to)\s+/i, '').trim();
+          if (cleaned.length >= 2) {
+            extractedDest = cleaned;
+            break;
+          }
         }
       }
     }
