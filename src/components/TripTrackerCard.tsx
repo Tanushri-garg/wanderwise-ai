@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, MapPin, Calendar, Users, Wallet, Compass, PlaneTakeoff, Tag } from 'lucide-react';
+import { CheckCircle2, Circle, MapPin, Calendar, Users, Wallet, Compass, PlaneTakeoff, Tag, Sparkles, ArrowRight } from 'lucide-react';
 import { TripParameters } from '../types';
 
 interface TripTrackerCardProps {
@@ -71,55 +71,69 @@ export function TripTrackerCard({ params, onQuickFill, onOpenModal }: TripTracke
   const progressPercent = Math.round((completedCount / items.length) * 100);
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
-            <Compass className="w-4 h-4 text-teal-600" /> Trip Details Progress
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {completedCount} of {items.length} requirements collected
-          </p>
+    <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:shadow-md transition-all space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-200/70 text-teal-700 flex items-center justify-center shadow-2xs">
+            <Compass className="w-4 h-4 text-teal-600" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+              Trip Details Progress
+            </h2>
+            <p className="text-[11px] text-slate-500 font-medium">
+              {completedCount} of {items.length} details collected ({progressPercent}%)
+            </p>
+          </div>
         </div>
+
         <button
           id="open-setup-from-tracker"
           onClick={onOpenModal}
-          className="text-xs text-teal-600 hover:text-teal-700 font-medium px-2.5 py-1 rounded-md bg-teal-50 hover:bg-teal-100/70 transition-colors"
+          className="text-xs text-teal-700 hover:text-teal-800 font-bold px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100/80 border border-teal-200/70 transition-all shadow-2xs hover:shadow-xs active:scale-95 flex items-center gap-1"
         >
-          Fill All
+          <Sparkles className="w-3 h-3 text-teal-600" /> Fill All
         </button>
       </div>
 
       {/* Progress bar */}
-      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-        <div
-          className="bg-teal-600 h-2 rounded-full transition-all duration-500"
-          style={{ width: `${progressPercent}%` }}
-        />
+      <div className="space-y-1">
+        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-200/60">
+          <div
+            className="bg-linear-to-r from-teal-500 via-teal-600 to-emerald-500 h-full rounded-full transition-all duration-600 shadow-2xs"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
       </div>
 
-      <div className="divide-y divide-slate-100">
+      <div className="divide-y divide-slate-100/90">
         {items.map((item) => {
           const Icon = item.icon;
           return (
             <div
               key={item.id}
-              className="py-2.5 flex items-center justify-between gap-3 text-xs"
+              className={`py-2.5 px-2 -mx-2 rounded-xl flex items-center justify-between gap-3 text-xs transition-colors ${
+                item.isSet ? 'bg-teal-50/20' : 'hover:bg-slate-50/60'
+              }`}
             >
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0">
                 {item.isSet ? (
-                  <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                  <div className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
                 ) : (
-                  <Circle className="w-4 h-4 text-slate-300 shrink-0" />
+                  <div className="w-5 h-5 rounded-full border-2 border-slate-300 flex items-center justify-center shrink-0">
+                    <Circle className="w-2.5 h-2.5 text-transparent" />
+                  </div>
                 )}
                 <div className="min-w-0">
-                  <span className="font-medium text-slate-700 block truncate">{item.label}</span>
+                  <span className="font-semibold text-slate-700 block truncate text-[11px]">{item.label}</span>
                   {item.value ? (
-                    <span className="text-slate-900 font-semibold truncate block">
+                    <span className="text-slate-900 font-bold truncate block text-xs">
                       {item.value}
                     </span>
                   ) : (
-                    <span className="text-slate-400 italic">Not specified yet</span>
+                    <span className="text-slate-400 italic text-[11px]">Not specified yet</span>
                   )}
                 </div>
               </div>
@@ -127,9 +141,9 @@ export function TripTrackerCard({ params, onQuickFill, onOpenModal }: TripTracke
               {!item.isSet && (
                 <button
                   onClick={() => onQuickFill(item.id, item.prompt)}
-                  className="shrink-0 text-[11px] text-teal-600 hover:text-teal-700 hover:underline"
+                  className="shrink-0 text-[11px] font-semibold text-teal-600 hover:text-teal-700 hover:bg-teal-50 px-2 py-0.5 rounded-md transition-colors flex items-center gap-0.5"
                 >
-                  Specify
+                  Specify <ArrowRight className="w-2.5 h-2.5" />
                 </button>
               )}
             </div>
@@ -137,9 +151,9 @@ export function TripTrackerCard({ params, onQuickFill, onOpenModal }: TripTracke
         })}
       </div>
 
-      <div className="pt-2 border-t border-slate-100 bg-slate-50/70 -mx-5 -mb-5 p-3.5 rounded-b-2xl">
-        <p className="text-[11px] text-slate-600 leading-relaxed">
-          💡 <strong>Tip:</strong> You can either chat naturally with WanderWise AI, choose a starter trip below, or click <strong>Fill All</strong> to set up everything in one form.
+      <div className="pt-2 border-t border-slate-100 bg-linear-to-b from-slate-50/70 to-teal-50/20 -mx-5 -mb-5 p-3.5 rounded-b-2xl border-b border-x border-slate-200/50">
+        <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+          💡 <strong>Tip:</strong> Chat naturally with WanderWise AI or click <strong>Fill All</strong> to set up destination, budget, and dates in seconds.
         </p>
       </div>
     </div>

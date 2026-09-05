@@ -154,8 +154,8 @@ export async function handleWeatherRequest(req: any, res: any) {
   }
 
   const query = req.query || {};
-  const city = (query.city as string) || (typeof req.url === 'string' ? new URL(req.url, 'http://localhost').searchParams.get('city') : null);
-  const dates = (query.dates as string | undefined) || (typeof req.url === 'string' ? new URL(req.url, 'http://localhost').searchParams.get('dates') || undefined : undefined);
+  const city = (query.city as string) || (typeof req.url === 'string' ? new URL(req.url, 'http://api.wanderwise.local').searchParams.get('city') : null);
+  const dates = (query.dates as string | undefined) || (typeof req.url === 'string' ? new URL(req.url, 'http://api.wanderwise.local').searchParams.get('dates') || undefined : undefined);
 
   if (!city) {
     const errPayload = { error: 'City parameter is required' };
@@ -175,3 +175,5 @@ export async function handleWeatherRequest(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json');
   return res.end(JSON.stringify(weather));
 }
+
+export default handleWeatherRequest;
