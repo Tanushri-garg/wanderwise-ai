@@ -49,15 +49,3 @@ Create the following environment variable for the Gemini API:
 
 ```env
 GEMINI_API_KEY=your_api_key_here
-
-Future Improvements
-Real-time flight price comparison
-Real-time hotel booking
-Map integration
-Currency conversion
-User accounts and saved trips
-Multi-language support
-
-Author
-
-Tanu Shri Garg
